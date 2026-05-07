@@ -1,20 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  AssistantRuntimeProvider,
-  type ThreadMessage,
-} from "@assistant-ui/react";
+import { useMemo, useRef, type ReactNode } from "react";
+import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { HttpAgent } from "@ag-ui/client";
 import { useAgUiRuntime } from "@assistant-ui/react-ag-ui";
 
-type StoredThread = {
-  id: string;
-  messages: readonly ThreadMessage[];
-};
-
 /**
- * AG-UI runtime with threadList adapter for multi-thread support.
+ * AG-UI runtime backed by a single assistant-ui thread.
  */
 export function MyRuntimeProvider({
   children,
@@ -23,45 +15,17 @@ export function MyRuntimeProvider({
     (process.env.NEXT_PUBLIC_AGUI_AGENT_URL as string | undefined) ??
     "http://localhost:8000/agent";
 
-  // Simple in-memory thread storage
-  const threadsRef = useRef<Map<string, StoredThread>>(new Map());
-  const [currentThreadId, setCurrentThreadId] = useState<string>(() => {
-    const id = crypto.randomUUID();
-    threadsRef.current.set(id, { id, messages: [] });
-    return id;
-  });
+  const threadIdRef = useRef<string>(crypto.randomUUID());
 
   const agent = useMemo(() => {
     return new HttpAgent({
       url: agentUrl,
-      threadId: currentThreadId,
+      threadId: threadIdRef.current,
       headers: {
         Accept: "text/event-stream",
       },
     });
-  }, [agentUrl, currentThreadId]);
-
-  const threadListAdapter = useMemo(
-    () => ({
-      threadId: currentThreadId,
-      onSwitchToNewThread: async () => {
-        const newId = crypto.randomUUID();
-        threadsRef.current.set(newId, { id: newId, messages: [] });
-        setCurrentThreadId(newId);
-        console.debug("[agui] Switched to new thread:", newId);
-      },
-      onSwitchToThread: async (threadId: string) => {
-        const thread = threadsRef.current.get(threadId);
-        if (!thread) {
-          throw new Error(`Thread ${threadId} not found`);
-        }
-        setCurrentThreadId(threadId);
-        console.debug("[agui] Switched to thread:", threadId);
-        return { messages: thread.messages };
-      },
-    }),
-    [currentThreadId],
-  );
+  }, [agentUrl]);
 
   const runtime = useAgUiRuntime({
     agent,
@@ -69,20 +33,7 @@ export function MyRuntimeProvider({
       debug: (...a: any[]) => console.debug("[agui]", ...a),
       error: (...a: any[]) => console.error("[agui]", ...a),
     },
-    adapters: {
-      threadList: threadListAdapter,
-    },
   });
-
-  // Persist messages to threadsRef when they change
-  useEffect(() => {
-    return runtime.thread.subscribe(() => {
-      threadsRef.current.set(currentThreadId, {
-        id: currentThreadId,
-        messages: runtime.thread.getState().messages,
-      });
-    });
-  }, [runtime, currentThreadId]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
