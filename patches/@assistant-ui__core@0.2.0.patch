@@ -1,0 +1,100 @@
+diff --git a/dist/runtimes/external-store/external-store-thread-list-runtime-core.js b/dist/runtimes/external-store/external-store-thread-list-runtime-core.js
+index 0d5f21f185f5c906c47b410db3b129dba27fbcff..6ddad8d744a6bd9615f3d58fcf13257d6ee7ed71 100644
+--- a/dist/runtimes/external-store/external-store-thread-list-runtime-core.js
++++ b/dist/runtimes/external-store/external-store-thread-list-runtime-core.js
+@@ -51,17 +51,7 @@ export class ExternalStoreThreadListRuntimeCore {
+         throw new Error("Method not implemented.");
+     }
+     getItemById(threadId) {
+-        for (const thread of this.adapter.threads ?? []) {
+-            if (thread.id === threadId)
+-                return thread;
+-        }
+-        for (const thread of this.adapter.archivedThreads ?? []) {
+-            if (thread.id === threadId)
+-                return thread;
+-        }
+-        if (threadId === DEFAULT_THREAD_ID)
+-            return DEFAULT_THREAD;
+-        return undefined;
++        return this._threadData[threadId];
+     }
+     __internal_setAdapter(adapter, initialLoad = false) {
+         const previousAdapter = this.adapter;
+@@ -79,7 +69,8 @@ export class ExternalStoreThreadListRuntimeCore {
+             return;
+         }
+         if (previousThreads !== newThreads ||
+-            previousArchivedThreads !== newArchivedThreads) {
++            previousArchivedThreads !== newArchivedThreads ||
++            previousThreadId !== newThreadId) {
+             this._threadData = {
+                 ...DEFAULT_THREAD_DATA,
+                 ...Object.fromEntries(adapter.threads?.map((t) => [
+@@ -114,6 +105,17 @@ export class ExternalStoreThreadListRuntimeCore {
+             this._mainThreadId = newThreadId;
+             this._mainThread = this.threadFactory();
+         }
++        if (!this._threadData[this._mainThreadId]) {
++          this._threadData = {
++            ...this._threadData,
++            [this._mainThreadId]: {
++              id: this._mainThreadId,
++              remoteId: undefined,
++              externalId: undefined,
++              status: "regular",
++            },
++        }
++      };
+         this._notifySubscribers();
+     }
+     async switchToThread(threadId) {
+diff --git a/src/runtimes/external-store/external-store-thread-list-runtime-core.ts b/src/runtimes/external-store/external-store-thread-list-runtime-core.ts
+index 108318066f9724e270b506cdb3aa04a08d957c61..3177c3f984a04bcee975e880ff1b92aa648ea1bd 100644
+--- a/src/runtimes/external-store/external-store-thread-list-runtime-core.ts
++++ b/src/runtimes/external-store/external-store-thread-list-runtime-core.ts
+@@ -78,14 +78,7 @@ export class ExternalStoreThreadListRuntimeCore
+   }
+ 
+   public getItemById(threadId: string) {
+-    for (const thread of this.adapter.threads ?? []) {
+-      if (thread.id === threadId) return thread as any;
+-    }
+-    for (const thread of this.adapter.archivedThreads ?? []) {
+-      if (thread.id === threadId) return thread as any;
+-    }
+-    if (threadId === DEFAULT_THREAD_ID) return DEFAULT_THREAD;
+-    return undefined;
++    return this._threadData[threadId];
+   }
+ 
+   public __internal_setAdapter(
+@@ -115,7 +108,8 @@ export class ExternalStoreThreadListRuntimeCore
+ 
+     if (
+       previousThreads !== newThreads ||
+-      previousArchivedThreads !== newArchivedThreads
++      previousArchivedThreads !== newArchivedThreads ||
++      previousThreadId !== newThreadId
+     ) {
+       this._threadData = {
+         ...DEFAULT_THREAD_DATA,
+@@ -159,6 +153,18 @@ export class ExternalStoreThreadListRuntimeCore
+       this._mainThread = this.threadFactory();
+     }
+ 
++    if (!this._threadData[this._mainThreadId]) {
++      this._threadData = {
++        ...this._threadData,
++        [this._mainThreadId]: {
++          id: this._mainThreadId,
++          remoteId: undefined,
++          externalId: undefined,
++          status: "regular",
++        },
++      };
++    }
++    
+     this._notifySubscribers();
+   }
+ 
